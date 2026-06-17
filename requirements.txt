@@ -1,7 +1,6 @@
 streamlit
 pandas
 numpy
-tqdm
 finance-datareader
 gspread
-oauth2client
+google-auth
