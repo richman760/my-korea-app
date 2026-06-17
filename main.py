@@ -2,11 +2,10 @@ import streamlit as st
 import FinanceDataReader as fdr
 import pandas as pd
 import datetime
-import numpy as np
 
-st.set_page_config(layout="wide", page_title="🇰🇷 최종 퀀트 스캐너")
+st.set_page_config(layout="wide", page_title="🇰🇷 퀀트 스캐너")
 
-# 1. 퀀트 로직 (한국_퀀트.py와 동일)
+# 1. 퀀트 로직 (원본 그대로)
 def run_backtest_for_stock(ticker_code):
     try:
         df = fdr.DataReader(ticker_code, '2005-01-01')
@@ -26,7 +25,6 @@ def run_backtest_for_stock(ticker_code):
         stop1 = int(entry * 0.95)
         stop2 = int(entry * 0.90)
         
-        # 확률 계산 로직
         signal_days = df[df['Signal'] == True].index[:-1]
         success = stop1_cnt = stop2_cnt = 0
         for d in signal_days:
@@ -45,8 +43,8 @@ def run_backtest_for_stock(ticker_code):
         }
     except: return None
 
-# 2. UI 및 계산기
-st.title("💰 퀀트 계산기 & 스캐너")
+# 2. UI 구성 (1000만원 기본값)
+st.title("💰 퀀트 스캐너")
 budget = st.number_input("투자 자산(원)", value=10000000, step=1000000)
 
 if st.button("🚀 스캔 시작"):
@@ -59,7 +57,7 @@ if st.button("🚀 스캔 시작"):
                 st.session_state['results'].append(res)
     st.success("스캔 완료!")
 
-# 3. 형이 원하던 멘트 출력
+# 3. 출력 (형의 원본 멘트 & 계산기 완벽 복원)
 today_str = datetime.date.today().strftime('%m월%d일')
 future_date_str = (datetime.date.today() + datetime.timedelta(days=12)).strftime('%m월%d일')
 
@@ -77,14 +75,15 @@ if 'results' in st.session_state:
                 st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 {res['prob_stop_2']:.0f}%")
             st.text(f"기한 {future_date_str}까지")
             
-            # 계산기
+            # 형이 원한 핵심 멘트 & 계산기
             shares = budget // res['today_close']
             profit = (res['target_val'] - res['today_close']) * shares
+            
             st.markdown("---")
-            st.markdown(f"**💰 {res['today_close']:,}원에 사서 {res['target_val']:,}원에 매도 시**")
-            st.markdown(f"**👉 {budget:,}원 투입 시 예상 수익: +{profit:,}원 (매수 수량: {shares:,}주)**")
+            st.markdown(f"**👉 {res['today_close']:,}원에 매수해서 {res['target_val']:,}원에 파세요. 성공률은 {res['prob_success']:.0f}%입니다.**")
+            st.markdown(f"**💰 {budget:,}원 투입 시 예상 수익: +{profit:,}원 (매수 수량: {shares:,}주)**")
 
-    # 4. 모바일 저장용 CSV
+    # 4. CSV 저장
     df_save = pd.DataFrame(st.session_state['results'])
     csv = df_save.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
     st.download_button("💾 휴대폰에 저장하기 (CSV)", csv, "퀀트결과.csv", "text/csv")
