@@ -6,7 +6,7 @@ import time
 
 st.set_page_config(layout="wide", page_title="🇰🇷 최종 퀀트 스캐너")
 
-# 숫자 -> 한글 변환 (형이 원하던 10,000,000원 + 천만원 표기)
+# 숫자 -> 한글 변환
 def format_korean(n):
     if n == 0: return "0원"
     units = ["", "만", "억", "조"]
@@ -18,10 +18,10 @@ def format_korean(n):
             res = f"{int(chunk)}{units[i]}" + res
     return res + "원"
 
-# [핵심 고침 1] KRX 서버가 차단하지 않게 리스트 한 번만 가져와서 기억하게 만듦
+# [핵심] KRX 서버 차단 방지 (캐싱)
 @st.cache_data(ttl=3600)
 def get_ticker_list():
-    for _ in range(3): # 에러 나도 3번은 다시 시도함 (앱 안 뻗게)
+    for _ in range(3): 
         try:
             df = fdr.StockListing('KRX')
             return df[['Code', 'Name']].to_dict('records')
@@ -29,8 +29,8 @@ def get_ticker_list():
             time.sleep(1)
     return None
 
-# 1. 퀀트 로직 (원본 그대로)
-def run_backtest_for_stock(ticker_code, ticker_name): # [핵심 고침 2] 이름 가져오려고 서버 또 찌르지 않음!
+# 1. 퀀트 로직
+def run_backtest_for_stock(ticker_code, ticker_name): 
     try:
         df = fdr.DataReader(ticker_code, '2005-01-01')
         if len(df) < 250: return None
@@ -39,7 +39,6 @@ def run_backtest_for_stock(ticker_code, ticker_name): # [핵심 고침 2] 이름
         df['STD20'] = df['Close'].rolling(window=20).std()
         df['BB_Lower'] = df['MA20'] - (2 * df['STD20'])
         
-        # 원본 RSI 로직 완벽 복구
         delta = df['Close'].diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -75,7 +74,7 @@ def run_backtest_for_stock(ticker_code, ticker_name): # [핵심 고침 2] 이름
             if sub['Low'].min() <= stop2: stop2_cnt += 1
             
         return {
-            'name': ticker_name, # 여기서 안전하게 이름 출력
+            'name': ticker_name, 
             'today_close': entry, 'target_val': target, 'stop_1_val': stop1, 'stop_2_val': stop2,
             'prob_success': (success / len(signal_days)) * 100,
             'prob_stop_1': (stop1_cnt / len(signal_days)) * 100,
@@ -86,14 +85,12 @@ def run_backtest_for_stock(ticker_code, ticker_name): # [핵심 고침 2] 이름
 # 2. UI 구성
 st.title("💰 퀀트 스캐너")
 budget = st.number_input("투자 자산(원)", value=10000000, step=1000000)
-# 형이 답답해했던 10,000,000원 + 천만원 표기 완벽 적용
 st.write(f"### 현재 설정 자산: {budget:,}원 ({format_korean(budget)})")
 
 if st.button("🚀 스캔 시작"):
     st.session_state['results'] = []
     tickers = get_ticker_list()
     
-    # 서버 뻗었을 때 대처법
     if not tickers:
         st.error("⚠️ 한국거래소(KRX) 서버가 붐벼서 연결되지 않았습니다. 잠시 후 버튼을 다시 눌러주세요.")
     else:
@@ -102,23 +99,3 @@ if st.button("🚀 스캔 시작"):
                 res = run_backtest_for_stock(stock['Code'], stock['Name'])
                 if res and res['prob_success'] >= 80:
                     st.session_state['results'].append(res)
-        st.success("스캔 완료!")
-
-# 3. 출력 (형의 원본 멘트 100% 복원)
-today_str = datetime.date.today().strftime('%m월%d일')
-future_date_str = (datetime.date.today() + datetime.timedelta(days=12)).strftime('%m월%d일')
-
-if 'results' in st.session_state and st.session_state['results']:
-    for res in st.session_state['results']:
-        with st.expander(f"📌 {res['name']}", expanded=True):
-            st.text(f"종목명 : {res['name']}")
-            st.text(f"추천 진입가 {today_str} 종가 부근 ({res['today_close']:,}원 내외)")
-            st.text(f"당일고가 {res['target_val']:,}원 도달 가능성 {res['prob_success']:.0f}%")
-            st.text(f"당일종가 < {res['stop_1_val']:,}원 도달 가능성 {res['prob_stop_1']:.0f}%")
-            
-            if res['prob_stop_2'] < 3:
-                st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 극히드묾")
-            else:
-                st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 {res['prob_stop_2']:.0f}%")
-            
-            st.text(f"기한 {future_date_str}까지 ({future_date_str}까지 당일고가, 종가 도달하지 않을
