@@ -2,14 +2,16 @@ import streamlit as st
 import FinanceDataReader as fdr
 import pandas as pd
 import datetime
+import numpy as np
 
-st.set_page_config(layout="wide", page_title="🇰🇷 최종 완벽 퀀트 스캐너")
+st.set_page_config(layout="wide", page_title="🇰🇷 최종 퀀트 스캐너")
 
-# 1. 퀀트 로직
+# 1. 퀀트 로직 (한국_퀀트.py와 동일)
 def run_backtest_for_stock(ticker_code):
     try:
         df = fdr.DataReader(ticker_code, '2005-01-01')
         if len(df) < 250: return None
+        
         df['MA20'] = df['Close'].rolling(window=20).mean()
         df['STD20'] = df['Close'].rolling(window=20).std()
         df['BB_Lower'] = df['MA20'] - (2 * df['STD20'])
@@ -24,6 +26,7 @@ def run_backtest_for_stock(ticker_code):
         stop1 = int(entry * 0.95)
         stop2 = int(entry * 0.90)
         
+        # 확률 계산 로직
         signal_days = df[df['Signal'] == True].index[:-1]
         success = stop1_cnt = stop2_cnt = 0
         for d in signal_days:
@@ -42,53 +45,46 @@ def run_backtest_for_stock(ticker_code):
         }
     except: return None
 
-# 2. UI 구성
-st.title("💰 최종 완벽 퀀트 스캐너")
+# 2. UI 및 계산기
+st.title("💰 퀀트 계산기 & 스캐너")
 budget = st.number_input("투자 자산(원)", value=10000000, step=1000000)
-min_prob = st.slider("최소 성공 확률 설정 (%)", 0, 100, 80) # [추가] 승률 조절 슬라이더
 
 if st.button("🚀 스캔 시작"):
     st.session_state['results'] = []
     tickers = fdr.StockListing('KRX')[['Code', 'Name']].to_dict('records')
-    
-    # [추가] 진행바 추가
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    for i, stock in enumerate(tickers[:300]): 
-        res = run_backtest_for_stock(stock['Code'])
-        if res and res['prob_success'] >= min_prob:
-            st.session_state['results'].append(res)
-        
-        # 진행바 업데이트
-        progress_bar.progress((i + 1) / 300)
-        status_text.text(f"스캔 중... {i+1}/300 종목 완료")
-    
-    # [추가] 승률 높은 순으로 자동 정렬
-    st.session_state['results'].sort(key=lambda x: x['prob_success'], reverse=True)
+    with st.spinner('스캔 중...'):
+        for stock in tickers[:300]: 
+            res = run_backtest_for_stock(stock['Code'])
+            if res and res['prob_success'] >= 80:
+                st.session_state['results'].append(res)
     st.success("스캔 완료!")
 
-# 3. 형이 원하던 그 문구 및 계산기 출력
+# 3. 형이 원하던 멘트 출력
+today_str = datetime.date.today().strftime('%m월%d일')
+future_date_str = (datetime.date.today() + datetime.timedelta(days=12)).strftime('%m월%d일')
+
 if 'results' in st.session_state:
     for res in st.session_state['results']:
-        with st.expander(f"📌 {res['name']} (승률 {res['prob_success']:.0f}%)", expanded=True):
-            today_str = datetime.date.today().strftime('%m월%d일')
-            future_date_str = (datetime.date.today() + datetime.timedelta(days=12)).strftime('%m월%d일')
-            
+        with st.expander(f"📌 {res['name']}", expanded=True):
             st.text(f"종목명 : {res['name']}")
             st.text(f"추천 진입가 {today_str} 종가 부근 ({res['today_close']:,}원 내외)")
             st.text(f"당일고가 {res['target_val']:,}원 도달 가능성 {res['prob_success']:.0f}%")
             st.text(f"당일종가 < {res['stop_1_val']:,}원 도달 가능성 {res['prob_stop_1']:.0f}%")
-            if res['prob_stop_2'] < 3: st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 극히드묾")
-            else: st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 {res['prob_stop_2']:.0f}%")
+            
+            if res['prob_stop_2'] < 3:
+                st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 극히드묾")
+            else:
+                st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 {res['prob_stop_2']:.0f}%")
             st.text(f"기한 {future_date_str}까지")
             
+            # 계산기
             shares = budget // res['today_close']
             profit = (res['target_val'] - res['today_close']) * shares
             st.markdown("---")
             st.markdown(f"**💰 {res['today_close']:,}원에 사서 {res['target_val']:,}원에 매도 시**")
             st.markdown(f"**👉 {budget:,}원 투입 시 예상 수익: +{profit:,}원 (매수 수량: {shares:,}주)**")
 
+    # 4. 모바일 저장용 CSV
     df_save = pd.DataFrame(st.session_state['results'])
     csv = df_save.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-    st.download_button("💾 휴대폰에 저장하기 (CSV)", csv, "퀀트_스캔결과.csv", "text/csv")
+    st.download_button("💾 휴대폰에 저장하기 (CSV)", csv, "퀀트결과.csv", "text/csv")
