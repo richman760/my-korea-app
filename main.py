@@ -55,13 +55,25 @@ if st.session_state['ticker_list']:
 for r in st.session_state['results']:
     st.write(f"📌 {r['name']} | 진입: {r['close']:,}원 | 목표: {r['target']:,}원")
 
-# 저장
-if st.button("💾 구글 시트 저장"):
+import traceback  # 맨 위에 이 줄을 꼭 추가해!
+
+# 7. 구글 시트 저장 (에러 상세 추적 모드)
+if st.session_state.get('results') and st.button("💾 구글 시트 저장"):
     try:
+        # 인증 설정 (기존과 동일)
         creds = service_account.Credentials.from_service_account_info(
             st.secrets["gsheets"], scopes=['https://www.googleapis.com/auth/spreadsheets']
         )
-        sheet = gspread.authorize(creds).open_by_url(st.secrets["sheet_url"]).sheet1
-        sheet.append_rows([[str(datetime.date.today()), r['name'], f"{r['close']:,}원"] for r in st.session_state['results']])
-        st.success("저장 성공!")
-    except Exception as e: st.error(f"저장 실패: {e}")
+        client = gspread.authorize(creds)
+        sheet = client.open_by_url(st.secrets["sheet_url"]).sheet1
+        
+        # 데이터 정리
+        rows = [[str(datetime.date.today()), r['name'], f"{r['close']:,}원"] for r in st.session_state['results']]
+        
+        # 저장 실행
+        sheet.append_rows(rows)
+        st.success("저장 완료!")
+        
+    except Exception:
+        # [핵심] 족보를 다 긁어와서 화면에 뿌려줘
+        st.error(f"상세 에러 내용: \n\n{traceback.format_exc()}")
