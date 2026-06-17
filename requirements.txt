@@ -3,4 +3,5 @@ pandas
 numpy
 tqdm
 finance-datareader
-streamlit-gsheets
+gspread
+oauth2client
