@@ -1,6 +1,2 @@
 streamlit
-finance-datareader
-pandas
-numpy
 gspread
-google-auth
