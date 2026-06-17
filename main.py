@@ -3,7 +3,20 @@ import FinanceDataReader as fdr
 import pandas as pd
 import datetime
 
-st.set_page_config(layout="wide", page_title="🇰🇷 퀀트 스캐너")
+st.set_page_config(layout="wide", page_title="🇰🇷 최종 퀀트 스캐너")
+
+# 숫자 -> 한글 변환 함수 (천만원 표시)
+def format_korean(n):
+    if n == 0: return "0원"
+    units = ["", "만", "억", "조"]
+    res = ""
+    # 4자리씩 끊어서 처리
+    n_str = str(n)
+    for i in range(len(n_str) // 4 + 1):
+        chunk = n_str[-4*(i+1):] if i == 0 else n_str[-4*(i+1):-4*i]
+        if chunk and int(chunk) > 0:
+            res = f"{int(chunk)}{units[i]}" + res
+    return res + "원"
 
 # 1. 퀀트 로직 (원본 그대로)
 def run_backtest_for_stock(ticker_code):
@@ -43,9 +56,11 @@ def run_backtest_for_stock(ticker_code):
         }
     except: return None
 
-# 2. UI 구성 (1000만원 기본값)
+# 2. UI 구성
 st.title("💰 퀀트 스캐너")
 budget = st.number_input("투자 자산(원)", value=10000000, step=1000000)
+# 형이 원한 숫자 + 한글 표시
+st.write(f"### 현재 설정 자산: {budget:,}원 ({format_korean(budget)})")
 
 if st.button("🚀 스캔 시작"):
     st.session_state['results'] = []
@@ -75,13 +90,15 @@ if 'results' in st.session_state:
                 st.text(f"당일종가 < {res['stop_2_val']:,}원 도달 가능성 {res['prob_stop_2']:.0f}%")
             st.text(f"기한 {future_date_str}까지")
             
-            # 형이 원한 핵심 멘트 & 계산기
+            # 계산기
             shares = budget // res['today_close']
             profit = (res['target_val'] - res['today_close']) * shares
             
             st.markdown("---")
+            # 형이 원하는 멘트
             st.markdown(f"**👉 {res['today_close']:,}원에 매수해서 {res['target_val']:,}원에 파세요. 성공률은 {res['prob_success']:.0f}%입니다.**")
-            st.markdown(f"**💰 {budget:,}원 투입 시 예상 수익: +{profit:,}원 (매수 수량: {shares:,}주)**")
+            # 금액 표시 (숫자 + 한글)
+            st.markdown(f"**💰 {budget:,}원 ({format_korean(budget)}) 투입 시 예상 수익: +{profit:,}원 ({format_korean(profit)}) (매수 수량: {shares:,}주)**")
 
     # 4. CSV 저장
     df_save = pd.DataFrame(st.session_state['results'])
